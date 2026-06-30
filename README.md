@@ -1,5 +1,7 @@
 # Strata
 
+![Strata Demo](docs/strata_demo.gif)
+
 **Map your entire OT network from a packet capture — every PLC, HMI, and protocol — without sending a single packet.**
 
 Strata reads a `.pcap` and reconstructs the plant: it finds the controllers, the
@@ -75,6 +77,8 @@ The findings are the point — the patterns an OT analyst actually wants surface
 Each finding cites the exact flow it came from.
 
 ## How it works
+
+![Strata Dashboard](docs/strata_hero.png)
 
 ```
   capture.pcap
