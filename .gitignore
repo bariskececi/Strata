@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+strata_results.json
+.venv/
+venv/
+.env
+.pytest_cache/
+.DS_Store

@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Strata — OT network map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="/static/d3.min.js"></script>
+<style>
+  :root{
+    --bg:#080b11; --panel:#0f1623; --panel2:#121c2c; --line:#1d2a3a;
+    --ink:#cdd9e8; --dim:#65788f; --faint:#3b4a5e;
+    --cyan:#37e1d6; --amber:#ffb454; --red:#ff5740; --ok:#39d98a;
+    --violet:#b48cff; --slate:#8aa0b8;
+    --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+    --disp:'Chakra Petch',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:var(--mono);overflow:hidden}
+  body{display:grid;grid-template-rows:auto 1fr;height:100vh}
+
+  header{display:flex;align-items:center;gap:20px;padding:12px 20px;
+    background:linear-gradient(180deg,#0c121d,#0a0f18);border-bottom:1px solid var(--line)}
+  .mark{font-family:var(--disp);font-weight:700;font-size:20px;letter-spacing:3px;color:#fff;
+    display:flex;align-items:center;gap:9px}
+  .mark .dot{width:9px;height:9px;border-radius:2px;background:var(--cyan);
+    box-shadow:0 0 10px var(--cyan)}
+  .src{font-family:var(--disp);font-size:12px;letter-spacing:1.5px;color:var(--dim);
+    text-transform:uppercase;border-left:1px solid var(--line);padding-left:16px}
+  .src b{color:var(--ink)}
+  .stats{margin-left:auto;display:flex;gap:24px}
+  .stat{text-align:right;line-height:1.1}
+  .stat .v{font-family:var(--disp);font-size:21px;font-weight:700;color:#fff}
+  .stat .v.crit{color:var(--red)} .stat .v.high{color:var(--amber)}
+  .stat .k{font-size:9px;letter-spacing:1.4px;color:var(--dim);text-transform:uppercase}
+
+  main{display:grid;grid-template-columns:1fr 372px;min-height:0}
+  #mapwrap{position:relative;overflow:hidden;
+    background:radial-gradient(1100px 640px at 50% 28%,#0d1726 0%,#080b11 72%)}
+  svg{width:100%;height:100%;display:block}
+  .band rect{fill:transparent}
+  .band line{stroke:#13202f;stroke-width:1;stroke-dasharray:2 4}
+  .band text{fill:var(--faint);font-family:var(--disp);font-size:11px;letter-spacing:2px;
+    text-transform:uppercase}
+  .edge{fill:none}
+  .edge.ot{stroke:var(--cyan);stroke-width:1.2;opacity:.42}
+  .edge.it{stroke:var(--slate);stroke-width:1;opacity:.22}
+  .edge.danger{stroke:var(--red);stroke-width:2.4;opacity:.95}
+  .node circle{stroke:#0a0f18;stroke-width:2;cursor:pointer}
+  .node .ring{fill:none;stroke-width:1.5;opacity:.5}
+  .node text.ip{fill:var(--ink);font-size:10.5px;text-anchor:middle}
+  .node text.role{fill:var(--dim);font-size:8.5px;text-anchor:middle;letter-spacing:.4px}
+  .node.dim{opacity:.18}
+  .edge.dim{opacity:.05}
+
+  .legend{position:absolute;left:14px;bottom:12px;display:flex;gap:14px;flex-wrap:wrap;
+    max-width:60%;font-size:9.5px;letter-spacing:.5px;color:var(--dim);text-transform:uppercase;
+    background:rgba(8,11,17,.6);padding:7px 11px;border:1px solid var(--line);border-radius:3px}
+  .legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
+
+  aside{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .fh{font-family:var(--disp);font-size:11px;letter-spacing:2.5px;color:var(--dim);
+    padding:12px 16px;border-bottom:1px solid var(--line);text-transform:uppercase}
+  #findings{flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+  .finding{padding:11px 16px;border-bottom:1px solid #0d1421}
+  .finding .head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .chip{font-family:var(--disp);font-size:8.5px;letter-spacing:1px;padding:2px 7px;border-radius:3px;
+    text-transform:uppercase;font-weight:600}
+  .chip.critical{background:rgba(255,87,64,.16);color:var(--red);border:1px solid var(--red)}
+  .chip.high{background:rgba(255,180,84,.14);color:var(--amber);border:1px solid var(--amber)}
+  .chip.notice{background:rgba(55,225,214,.12);color:var(--cyan);border:1px solid #2a6e6a}
+  .chip.info{background:rgba(138,160,184,.1);color:var(--slate);border:1px solid #33414f}
+  .finding .title{font-size:12px;color:var(--ink)}
+  .finding .detail{font-size:10.5px;color:var(--dim);line-height:1.5;margin-top:3px}
+  .finding .ev{font-size:9.5px;color:var(--faint);margin-top:4px}
+
+  @media (max-width:900px){ main{grid-template-columns:1fr} aside{display:none} }
+</style>
+</head>
+<body>
+  <header>
+    <div class="mark"><span class="dot"></span>STRATA</div>
+    <div class="src">passive map · <b id="srcName">—</b></div>
+    <div class="stats">
+      <div class="stat"><div class="v" id="sAssets">0</div><div class="k">Assets</div></div>
+      <div class="stat"><div class="v" id="sFlows">0</div><div class="k">Flows</div></div>
+      <div class="stat"><div class="v crit" id="sCrit">0</div><div class="k">Critical</div></div>
+      <div class="stat"><div class="v high" id="sHigh">0</div><div class="k">High</div></div>
+    </div>
+  </header>
+
+  <main>
+    <div id="mapwrap">
+      <svg id="map"></svg>
+      <div class="legend">
+        <span><i style="background:var(--amber)"></i>PLC / controller</span>
+        <span><i style="background:var(--cyan)"></i>SCADA / HMI</span>
+        <span><i style="background:var(--violet)"></i>Engineering WS</span>
+        <span><i style="background:var(--ok)"></i>Historian</span>
+        <span><i style="background:var(--slate)"></i>Enterprise / infra</span>
+        <span><i style="background:var(--red)"></i>External · risk edge</span>
+      </div>
+    </div>
+    <aside>
+      <div class="fh">Risk findings</div>
+      <div id="findings"></div>
+    </aside>
+  </main>
+
+<script>
+const LEVEL_NAMES = {5:"External / Internet",4:"Enterprise (L4)",3.5:"DMZ / Network",
+  3:"Site Ops (L3)",2:"Supervisory (L2)",1:"Control (L1)",0.5:"Field (L0)"};
+const ROLE_COLOR = {plc:"var(--amber)",field_device:"var(--amber)",scada_server:"var(--cyan)",
+  hmi:"var(--cyan)",engineering_ws:"var(--violet)",historian:"var(--ok)",
+  it_host:"var(--slate)",network:"var(--slate)",external:"var(--red)",unknown:"#4a5a6e"};
+const ROLE_LABEL = {plc:"PLC",field_device:"Field I/O",scada_server:"SCADA",hmi:"HMI",
+  engineering_ws:"ENG WS",historian:"Historian",it_host:"Enterprise",network:"Network",
+  external:"Internet",unknown:"?"};
+
+let DATA=null;
+
+async function load(){
+  DATA = await (await fetch('/api/data')).json();
+  document.getElementById('srcName').textContent =
+    (DATA.meta && DATA.meta.source) ? DATA.meta.source.split('/').pop() : '—';
+  document.getElementById('sAssets').textContent = DATA.assets.length;
+  document.getElementById('sFlows').textContent = DATA.flows.length;
+  const crit = DATA.findings.filter(f=>f.severity==='critical').length;
+  const high = DATA.findings.filter(f=>f.severity==='high').length;
+  document.getElementById('sCrit').textContent = crit;
+  document.getElementById('sHigh').textContent = high;
+  renderFindings();
+  draw();
+  window.addEventListener('resize', ()=>{ d3.select('#map').selectAll('*').remove(); draw(); });
+}
+
+function dangerPairs(){
+  const s = new Set();
+  for(const f of DATA.findings){
+    if((f.severity==='critical'||f.severity==='high') && f.src && f.dst)
+      s.add(f.src+'>'+f.dst);
+  }
+  return s;
+}
+
+function draw(){
+  const wrap=document.getElementById('mapwrap');
+  const W=wrap.clientWidth, H=wrap.clientHeight;
+  const svg=d3.select('#map').attr('viewBox',`0 0 ${W} ${H}`);
+  const topPad=46, botPad=40, leftPad=132, rightPad=46;
+
+  // bands present, ordered high level -> low
+  const levels=[...new Set(DATA.assets.map(a=> a.purdue_level==null? -1 : a.purdue_level))]
+    .sort((a,b)=>b-a);
+  const bandH=(H-topPad-botPad)/levels.length;
+  const yOf=lvl=> topPad + levels.indexOf(lvl==null?-1:lvl)*bandH + bandH/2;
+
+  // position nodes within each band
+  const pos={};
+  for(const lvl of levels){
+    const inBand=DATA.assets.filter(a=>(a.purdue_level==null?-1:a.purdue_level)===lvl);
+    inBand.forEach((a,i)=>{
+      pos[a.ip]={ x: leftPad + (i+1)/(inBand.length+1)*(W-leftPad-rightPad), y: yOf(lvl), a };
+    });
+  }
+
+  // bands
+  const gB=svg.append('g');
+  levels.forEach((lvl,i)=>{
+    const y=topPad+i*bandH;
+    gB.append('line').attr('x1',leftPad-16).attr('y1',y).attr('x2',W-rightPad).attr('y2',y).attr('class','band-sep').attr('stroke','#13202f').attr('stroke-dasharray','2 4');
+    gB.append('text').attr('x',16).attr('y',y+bandH/2).attr('dy','.35em')
+      .attr('fill','var(--faint)').style('font-family','var(--disp)').style('font-size','11px')
+      .style('letter-spacing','1.5px').text((LEVEL_NAMES[lvl]||'Unclassified').toUpperCase());
+  });
+
+  const danger=dangerPairs();
+  const gE=svg.append('g'), gN=svg.append('g');
+
+  // edges
+  DATA.flows.forEach(f=>{
+    const s=pos[f.src], t=pos[f.dst]; if(!s||!t) return;
+    const isDanger=danger.has(f.src+'>'+f.dst);
+    const cls = isDanger?'danger':(f.family==='ot'?'ot':'it');
+    const my=(s.y+t.y)/2;
+    const d=`M${s.x},${s.y} C${s.x},${my} ${t.x},${my} ${t.x},${t.y}`;
+    const p=gE.append('path').attr('class','edge '+cls).attr('d',d)
+      .attr('data-src',f.src).attr('data-dst',f.dst);
+    if(isDanger){
+      const len=p.node().getTotalLength();
+      p.attr('stroke-dasharray',`6 6`);
+      (function flow(){ p.attr('stroke-dashoffset',12).transition().duration(700)
+        .ease(d3.easeLinear).attr('stroke-dashoffset',0).on('end',flow); })();
+    }
+  });
+
+  // nodes
+  Object.values(pos).forEach(({x,y,a})=>{
+    const g=gN.append('g').attr('class','node').attr('transform',`translate(${x},${y})`)
+      .attr('data-ip',a.ip);
+    const col=ROLE_COLOR[a.role]||'#4a5a6e';
+    const r = (a.role==='plc'||a.role==='external')?10:8;
+    if(a.role==='external'){
+      const ring=g.append('circle').attr('class','ring').attr('r',r+3).attr('stroke',col);
+      (function pulse(){ ring.attr('r',r+3).attr('opacity',.6).transition().duration(2200)
+        .attr('r',r+16).attr('opacity',0).on('end',pulse); })();
+    }
+    g.append('circle').attr('r',r).attr('fill',col);
+    g.append('text').attr('class','ip').attr('y',r+13).text(a.ip);
+    const vend=a.vendor?` · ${a.vendor.split(' ')[0]}`:'';
+    g.append('text').attr('class','role').attr('y',r+24).text((ROLE_LABEL[a.role]||a.role)+vend);
+    g.on('mouseenter',()=>highlight(a.ip)).on('mouseleave',clearHi);
+  });
+}
+
+function highlight(ip){
+  d3.selectAll('.node').classed('dim',function(){ return this.getAttribute('data-ip')!==ip; });
+  d3.selectAll('.edge').classed('dim',function(){
+    return this.getAttribute('data-src')!==ip && this.getAttribute('data-dst')!==ip; });
+  // un-dim neighbours
+  DATA.flows.forEach(f=>{ if(f.src===ip||f.dst===ip){
+    const other=f.src===ip?f.dst:f.src;
+    d3.selectAll(`.node[data-ip="${other}"]`).classed('dim',false);
+  }});
+}
+function clearHi(){ d3.selectAll('.node,.edge').classed('dim',false); }
+
+function renderFindings(){
+  const box=document.getElementById('findings'); box.innerHTML='';
+  if(!DATA.findings.length){ box.innerHTML='<div class="finding"><div class="detail">No findings.</div></div>'; return; }
+  for(const f of DATA.findings){
+    const el=document.createElement('div'); el.className='finding';
+    const ev = f.src||f.dst ? `${f.src||''} ${f.src&&f.dst?'→':''} ${f.dst||''} ${f.proto?('· '+f.proto.toUpperCase()):''}` : '';
+    el.innerHTML=`<div class="head"><span class="chip ${f.severity}">${f.severity}</span>`+
+      `<span class="title">${f.title}</span></div>`+
+      `<div class="detail">${f.detail}</div>`+
+      (ev.trim()?`<div class="ev">${ev}</div>`:'');
+    box.appendChild(el);
+  }
+}
+
+load();
+</script>
+</body>
+</html>
